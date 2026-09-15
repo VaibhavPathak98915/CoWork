@@ -1,9 +1,12 @@
-/** An error with an HTTP status that is safe to show the user. */
+/** An error with an HTTP status whose message is written to be shown to the user. */
 export class ApiError extends Error {
   constructor(status, message, code) {
     super(message);
     this.status = status;
     this.code = code;
+    // Marks the message as deliberate. Anything without this is an unexpected
+    // failure whose text could leak internals, so it gets a generic reply.
+    this.expose = true;
   }
   static badRequest(message, code) { return new ApiError(400, message, code); }
   static unauthorized(message = "Not signed in") { return new ApiError(401, message); }
@@ -19,8 +22,12 @@ export const notFound = (req, res) =>
   res.status(404).json({ error: { message: `No route for ${req.method} ${req.originalUrl}` } });
 
 /**
- * Terminal error middleware. Anything without an explicit status is treated as a
- * bug: logged in full on the server, reported to the client as a bare 500 so no
+ * Terminal error middleware.
+ *
+ * What decides whether the client sees the real message is INTENT, not status.
+ * An ApiError was written to be read — including a 503 "the spaces service is
+ * unavailable", which tells the user exactly what is wrong. Anything else is an
+ * unexpected failure: logged in full here, reported as a bare generic line so no
  * stack trace or internal detail escapes.
  */
 export const errorHandler = (serviceName) => (err, req, res, _next) => {
@@ -28,7 +35,7 @@ export const errorHandler = (serviceName) => (err, req, res, _next) => {
   if (status >= 500) console.error(`[${serviceName}] ${req.method} ${req.originalUrl}`, err);
   res.status(status).json({
     error: {
-      message: status >= 500 ? "Something went wrong. Please try again." : err.message,
+      message: err.expose ? err.message : "Something went wrong. Please try again.",
       ...(err.code ? { code: err.code } : {}),
     },
   });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Btn, Input, Select } from "../components/ui.jsx";
 import Modal from "../components/Modal.jsx";
 import { api } from "../api/client.js";
@@ -13,26 +13,43 @@ const todayStr = localDate;
 
 export default function BookSpaceModal({ open, onClose, onBooked }) {
   const [spaces, setSpaces] = useState([]);
-  const { plans } = usePlans();
+  const [spacesError, setSpacesError] = useState("");
+  const [loadingSpaces, setLoadingSpaces] = useState(false);
+  const { plans, error: plansError, loading: loadingPlans, refresh: refreshPlans } = usePlans();
   const [form, setForm] = useState({ spaceId: "", plan: "", duration: DURATIONS[2], startsOn: todayStr(), seats: 1 });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
+  const loadSpaces = useCallback(async () => {
+    setLoadingSpaces(true);
+    setSpacesError("");
+    try {
+      const { spaces } = await api.spaces();
+      setSpaces(spaces);
+      if (spaces[0]) set("spaceId", spaces[0].id);
+    } catch (e) {
+      setSpacesError(e.message);
+      setSpaces([]);
+    } finally {
+      setLoadingSpaces(false);
+    }
+  }, []);
+
   // Load the catalog when the modal first opens, not on mount — no point paying
-  // for it on every page view.
+  // for it on every page view. A previous failure leaves the list empty, so
+  // re-opening retries.
   useEffect(() => {
     if (!open || spaces.length) return;
-    api.spaces()
-      .then(({ spaces }) => {
-        setSpaces(spaces);
-        if (spaces[0]) set("spaceId", spaces[0].id);
-      })
-      .catch((e) => setErr(e.message));
-  }, [open, spaces.length]);
+    loadSpaces();
+  }, [open, spaces.length, loadSpaces]);
 
   useEffect(() => { if (open) setErr(""); }, [open]);
+
+  const catalogError = spacesError || plansError;
+  const retryCatalog = () => { loadSpaces(); refreshPlans(); };
+  const catalogReady = spaces.length > 0 && Boolean(plans?.length);
 
   // Default to the featured plan once the catalog arrives.
   useEffect(() => {
@@ -71,7 +88,11 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
           value={form.spaceId}
           onChange={(e) => set("spaceId", e.target.value)}
           style={{width:"100%",padding:"11px 14px",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:8,color:"var(--text)",fontSize:14,outline:"none"}}>
-          {spaces.length === 0 && <option value="">Loading spaces…</option>}
+          {spaces.length === 0 && (
+            <option value="">
+              {loadingSpaces ? "Loading spaces…" : spacesError ? "Couldn't load spaces" : "No spaces available"}
+            </option>
+          )}
           {spaces.map((s) => (
             <option key={s.id} value={s.id}>{s.icon} {s.name} — {s.type} ({s.capacity} seats)</option>
           ))}
@@ -91,13 +112,24 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
           <label style={{display:"block",fontSize:11,letterSpacing:1,textTransform:"uppercase",color:"var(--muted)",marginBottom:6}}>Plan</label>
           <select value={form.plan} onChange={(e) => set("plan", e.target.value)}
             style={{width:"100%",padding:"11px 14px",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:8,color:"var(--text)",fontSize:14,outline:"none"}}>
-            {!plans && <option value="">Loading plans…</option>}
+            {!plans?.length && (
+              <option value="">
+                {loadingPlans ? "Loading plans…" : plansError ? "Couldn't load plans" : "No plans available"}
+              </option>
+            )}
             {(plans ?? []).map((p) => (
               <option key={p.id} value={p.name}>{p.name} – {formatINR(p.price)}/{shortPeriod(p.period)}</option>
             ))}
           </select>
         </div>
       </div>
+
+      {catalogError && (
+        <div style={{padding:"10px 14px",background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",borderRadius:8,fontSize:13,color:"var(--red)",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <span>⚠ {catalogError}</span>
+          <Btn variant="ghost" style={{fontSize:12,padding:"6px 14px"}} onClick={retryCatalog}>Retry</Btn>
+        </div>
+      )}
 
       {err && (
         <div style={{padding:"10px 14px",background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",borderRadius:8,fontSize:13,color:"var(--red)",marginBottom:14}}>
@@ -107,10 +139,12 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
 
       <Btn
         variant="primary"
-        disabled={saving}
-        style={{width:"100%",textAlign:"center",padding:13,fontSize:14,marginTop:4,opacity:saving?.7:1}}
+        disabled={saving || !catalogReady}
+        style={{width:"100%",textAlign:"center",padding:13,fontSize:14,marginTop:4,
+          opacity:(saving || !catalogReady)?.5:1,
+          cursor:(saving || !catalogReady)?"not-allowed":"pointer"}}
         onClick={submit}>
-        {saving ? "Booking…" : "Confirm Booking →"}
+        {saving ? "Booking…" : catalogError ? "Unavailable" : "Confirm Booking →"}
       </Btn>
     </Modal>
   );

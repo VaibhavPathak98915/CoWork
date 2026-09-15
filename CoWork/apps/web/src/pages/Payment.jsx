@@ -18,7 +18,7 @@ const Payment = ({showToast, selectedPlanId}) => {
   const [done, setDone] = useState(false);
   const [form, setForm] = useState({name:"",card:"",expiry:"",cvv:"",upi:""});
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
-  const { plans, loading } = usePlans();
+  const { plans, error: plansError, loading, refresh } = usePlans();
 
   // Arriving from the sidebar rather than "Select Plan" means nothing was
   // chosen; fall back to the featured plan rather than showing an empty bill.
@@ -28,6 +28,10 @@ const Payment = ({showToast, selectedPlanId}) => {
 
   const lines = plan ? [{ label: `${plan.name} Plan`, amount: plan.price }, ...ADDONS] : [];
   const total = lines.reduce((sum, l) => sum + l.amount, 0);
+
+  // Without a catalog there is no price to charge. Rendering a ₹0 order would be
+  // worse than showing nothing: it looks authoritative and it is wrong.
+  const canPay = Boolean(plan) && !plansError;
 
   const handlePay = () => {
     setDone(true);
@@ -73,11 +77,18 @@ const Payment = ({showToast, selectedPlanId}) => {
           {method==="Net Banking"&&<Select label="Select Bank" options={["SBI","HDFC","ICICI","Axis","Kotak","Other"]}/>}
           {method==="Wallet"&&<Select label="Select Wallet" options={["Paytm","PhonePe","Amazon Pay","MobiKwik"]}/>}
 
-          <button onClick={handlePay}
-            style={{width:"100%",padding:14,borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,background:"var(--accent)",color:"#0a0a0a",marginTop:4,transition:"all .2s"}}
-            onMouseEnter={e=>e.target.style.background="#f0b055"}
+          {plansError && (
+            <div style={{padding:"12px 14px",marginBottom:14,background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",borderRadius:8,fontSize:13,color:"var(--red)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+              <span>⚠ {plansError}</span>
+              <Btn variant="ghost" style={{fontSize:12,padding:"6px 14px"}} onClick={refresh}>Retry</Btn>
+            </div>
+          )}
+
+          <button onClick={handlePay} disabled={!canPay}
+            style={{width:"100%",padding:14,borderRadius:10,border:"none",cursor:canPay?"pointer":"not-allowed",fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,background:"var(--accent)",color:"#0a0a0a",marginTop:4,transition:"all .2s",opacity:canPay?1:.5}}
+            onMouseEnter={e=>{if(canPay)e.target.style.background="#f0b055"}}
             onMouseLeave={e=>e.target.style.background="var(--accent)"}>
-            {loading ? "Loading…" : `Pay ${formatINR(total)} →`}
+            {loading ? "Loading…" : plansError ? "Unavailable" : `Pay ${formatINR(total)} →`}
           </button>
         </Card>
       </div>
@@ -86,6 +97,7 @@ const Payment = ({showToast, selectedPlanId}) => {
         <div style={{background:"var(--surface2)",borderRadius:12,padding:22,border:"1px solid var(--border)",marginBottom:16}}>
           <CardTitle>Order Summary</CardTitle>
           {loading && <div style={{fontSize:13,color:"var(--muted)",padding:"8px 0"}}>Loading plan…</div>}
+          {plansError && <div style={{fontSize:13,color:"var(--muted)",padding:"8px 0"}}>Plan details unavailable</div>}
           {lines.map((l,i)=>(
             <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"8px 0",borderBottom:"1px solid var(--border)",color:l.amount<0?"var(--green)":"var(--text)"}}>
               <span style={{color:"var(--muted)"}}>{l.label}</span>
@@ -94,7 +106,7 @@ const Payment = ({showToast, selectedPlanId}) => {
           ))}
           <div style={{height:1,background:"var(--border)",margin:"12px 0"}}/>
           <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:15,color:"var(--accent)"}}>
-            <span>Total</span><span>{formatINR(total)}</span>
+            <span>Total</span><span>{canPay ? formatINR(total) : "—"}</span>
           </div>
         </div>
         <Card style={{background:"linear-gradient(145deg,#1a1408,var(--surface))"}}>
@@ -102,7 +114,7 @@ const Payment = ({showToast, selectedPlanId}) => {
             <div style={{fontSize:32}}>⭐</div>
             <div>
               <div style={{fontWeight:700,fontSize:14}}>Gold Member</div>
-              <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>You'll earn {Math.round(total/100)} pts for this purchase</div>
+              <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>You'll earn {canPay ? Math.round(total/100) : "—"} pts for this purchase</div>
             </div>
           </div>
         </Card>

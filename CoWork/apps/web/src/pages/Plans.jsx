@@ -24,7 +24,7 @@ const savingsAgainst = (plan, plans) => {
 };
 
 const Plans = ({setPage, showToast, selectedPlanId, setSelectedPlanId}) => {
-  const { plans, error, loading } = usePlans();
+  const { plans, error, loading, refresh } = usePlans();
 
   const choose = (plan) => {
     setSelectedPlanId(plan.id);
@@ -39,8 +39,9 @@ const Plans = ({setPage, showToast, selectedPlanId, setSelectedPlanId}) => {
       </p>
 
       {error && (
-        <div style={{padding:"12px 16px",marginBottom:16,background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",borderRadius:10,fontSize:13,color:"var(--red)"}}>
-          ⚠ {error}
+        <div style={{padding:"12px 16px",marginBottom:16,background:"rgba(248,113,113,.1)",border:"1px solid rgba(248,113,113,.3)",borderRadius:10,fontSize:13,color:"var(--red)",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <span>⚠ {error}</span>
+          <Btn variant="ghost" style={{fontSize:12,padding:"6px 14px"}} onClick={refresh}>Retry</Btn>
         </div>
       )}
 
