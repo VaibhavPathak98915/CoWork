@@ -94,7 +94,7 @@ export function seed() {
   if (db.prepare("SELECT COUNT(*) AS n FROM bookings").get().n > 0) return false;
   const demo = [
     { userName: "Priya Mehta", spaceId: "open-desks",     spaceName: "Open Work Floor", spaceType: "Open Desks",     plan: "Day Pass",       duration: "Full Day", seats: 14, status: "active",  startsOn: today() },
-    { userName: "Amit Verma",  spaceId: "private-cabins", spaceName: "Private Cabin A", spaceType: "Private Cabins", plan: "Private Office", duration: "Monthly",  seats: 8,  status: "active",  startsOn: today() },
+    { userName: "Amit Verma",  spaceId: "private-cabins", spaceName: "Private Cabin A", spaceType: "Private Cabins", plan: "Annual Flex",   duration: "Monthly",  seats: 8,  status: "active",  startsOn: today() },
     { userName: "Sneha Rao",   spaceId: "meeting-rooms",  spaceName: "Meeting Room 1",  spaceType: "Meeting Rooms",  plan: "Monthly Flex",   duration: "1 Hour",   seats: 6,  status: "pending", startsOn: today() },
     { userName: "Karan Singh", spaceId: "event-space",    spaceName: "Conference Hall", spaceType: "Event Space",    plan: "Day Pass",       duration: "Half Day", seats: 8,  status: "expired", startsOn: daysAgo(1) },
     { userName: "Neha Gupta",  spaceId: "podcast-studio", spaceName: "Podcast Studio",  spaceType: "Podcast Studio", plan: "Day Pass",       duration: "1 Hour",   seats: 2,  status: "active",  startsOn: today() },

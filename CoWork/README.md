@@ -28,7 +28,8 @@ apps/web/           React 19 + Vite. Proxies /api → gateway, so the browser
 services/gateway/   :4000  The only entry point. Owns the session cookie, composes
                     the dashboard, proxies the live event stream.
 services/auth/      :4001  Accounts. Owns data/auth.db and nothing else reads it.
-services/spaces/    :4002  Space catalog and capacity. Owns data/spaces.db.
+services/spaces/    :4002  Space catalog, capacity, and the plan catalog.
+                    Owns data/spaces.db.
 services/bookings/  :4003  Reservations + the SSE feed. Owns data/bookings.db.
 packages/shared/    env, JWT sign/verify, HTTP errors, zod schemas — the contract
                     every service and the web form share.
@@ -63,6 +64,13 @@ Book a space in one tab and a second tab updates without a reload.
 
 If a service is down, its card degrades to "—" and a banner names it — deliberately not 0%,
 which would read as "nothing booked" rather than "we don't know".
+
+## Pricing
+
+One membership, three commitment periods — ₹499/day, ₹7,999/month, ₹24,999/year. The
+plans live in the spaces service and are served at `/api/plans`; the Plans page, the booking
+modal and the Payment summary all read from there, so a price changes in exactly one place.
+The "save ₹70,989 a year" line is computed from the other plans, never typed in.
 
 ## Adding a service
 

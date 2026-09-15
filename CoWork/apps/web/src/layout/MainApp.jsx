@@ -23,6 +23,9 @@ const pages = {dashboard:Dashboard, plans:Plans, spaces:Spaces, services:Service
 
 const MainApp = ({user, onLogout}) => {
   const [page, setPage] = useState("dashboard");
+  // Chosen on the Plans page, read by Payment — the two screens are siblings,
+  // so the selection lives in their common parent.
+  const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [toast, setToast] = useState({msg:"",visible:false});
   const toastTimer = useRef(null);
@@ -95,7 +98,12 @@ const MainApp = ({user, onLogout}) => {
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"26px 30px"}}>
-          <PageComp setPage={setPage} showToast={showToast}/>
+          <PageComp
+            setPage={setPage}
+            showToast={showToast}
+            selectedPlanId={selectedPlanId}
+            setSelectedPlanId={setSelectedPlanId}
+          />
         </div>
       </main>
 

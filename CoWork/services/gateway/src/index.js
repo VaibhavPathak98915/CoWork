@@ -99,6 +99,14 @@ app.get(
   })
 );
 
+app.get(
+  "/api/plans",
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    res.json(await serviceFetch(`${env.spacesServiceUrl}/plans`, {}, "spaces"));
+  })
+);
+
 app.post(
   "/api/bookings",
   requireAuth,

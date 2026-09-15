@@ -1,9 +1,24 @@
 /**
- * Small fixed-window limiter for credential endpoints, so a stolen email can't be
- * brute-forced from one host. In-memory on purpose: with several gateway replicas
- * this moves to Redis, which is the point at which it stops being a toy.
+ * Fixed-window limiter for credential endpoints, layered on two keys:
+ *
+ *   per account  — one email hammered with many passwords (targeted brute force)
+ *   per IP       — many accounts tried from one host (credential stuffing)
+ *
+ * A single per-IP counter can't tell those apart: set it low enough to stop a
+ * brute force and you lock out everyone behind one office NAT (or a test suite
+ * exercising its error paths). So the account limit is tight and the IP limit is
+ * loose, and each catches the attack the other misses.
+ *
+ * Only failures count. A successful sign-in is not evidence of an attack.
+ *
+ * In memory, so it resets on restart and is per-process. With several gateway
+ * replicas this belongs in Redis — the call sites don't change.
  */
-export function rateLimit({ windowMs = 15 * 60 * 1000, max = 10 } = {}) {
+export function rateLimit({
+  windowMs = 15 * 60 * 1000,
+  maxPerAccount = 8,
+  maxPerIp = 40,
+} = {}) {
   const hits = new Map();
 
   setInterval(() => {
@@ -11,29 +26,40 @@ export function rateLimit({ windowMs = 15 * 60 * 1000, max = 10 } = {}) {
     for (const [key, entry] of hits) if (entry.resetAt <= now) hits.delete(key);
   }, windowMs).unref();
 
-  return (req, res, next) => {
-    const key = req.ip;
-    const now = Date.now();
+  const read = (key) => {
     const entry = hits.get(key);
+    return entry && entry.resetAt > Date.now() ? entry : null;
+  };
 
-    if (entry && entry.resetAt > now && entry.count >= max) {
-      const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
-      res.set("Retry-After", String(retryAfter));
-      return res.status(429).json({
-        error: { message: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).` },
-      });
+  const bump = (key) => {
+    const existing = read(key);
+    if (existing) existing.count++;
+    else hits.set(key, { count: 1, resetAt: Date.now() + windowMs });
+  };
+
+  return (req, res, next) => {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const keys = [
+      [`ip:${req.ip}`, maxPerIp],
+      ...(email ? [[`acct:${email}`, maxPerAccount]] : []),
+    ];
+
+    for (const [key, max] of keys) {
+      const entry = read(key);
+      if (entry && entry.count >= max) {
+        const retryAfter = Math.ceil((entry.resetAt - Date.now()) / 1000);
+        res.set("Retry-After", String(retryAfter));
+        return res.status(429).json({
+          error: {
+            message: `Too many attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+          },
+        });
+      }
     }
 
-    // Only failures count. A successful sign-in is not evidence of an attack, and
-    // charging for it would lock out a legitimate user on a shared IP.
     res.on("finish", () => {
       if (res.statusCode < 400) return;
-      const current = hits.get(key);
-      if (!current || current.resetAt <= Date.now()) {
-        hits.set(key, { count: 1, resetAt: Date.now() + windowMs });
-      } else {
-        current.count++;
-      }
+      for (const [key] of keys) bump(key);
     });
 
     next();

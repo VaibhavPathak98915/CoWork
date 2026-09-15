@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { Btn, Input, Select } from "../components/ui.jsx";
 import Modal from "../components/Modal.jsx";
 import { api } from "../api/client.js";
+import { usePlans } from "../hooks/usePlans.js";
+import { formatINR, shortPeriod } from "../lib/format.js";
 import { createBookingSchema, DURATIONS } from "@cowork/shared/schemas";
 import { localDate } from "@cowork/shared/dates";
-
-const PLANS = ["Day Pass – ₹499", "Monthly Flex – ₹7,999", "Private Office – ₹24,999"];
 
 // localDate comes from the shared package, so the browser and the bookings
 // service agree on which day "today" is.
@@ -13,7 +13,8 @@ const todayStr = localDate;
 
 export default function BookSpaceModal({ open, onClose, onBooked }) {
   const [spaces, setSpaces] = useState([]);
-  const [form, setForm] = useState({ spaceId: "", plan: PLANS[0], duration: DURATIONS[2], startsOn: todayStr(), seats: 1 });
+  const { plans } = usePlans();
+  const [form, setForm] = useState({ spaceId: "", plan: "", duration: DURATIONS[2], startsOn: todayStr(), seats: 1 });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -32,6 +33,11 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
   }, [open, spaces.length]);
 
   useEffect(() => { if (open) setErr(""); }, [open]);
+
+  // Default to the featured plan once the catalog arrives.
+  useEffect(() => {
+    if (!form.plan && plans?.length) set("plan", (plans.find((p) => p.featured) ?? plans[0]).name);
+  }, [plans, form.plan]);
 
   const submit = async () => {
     setErr("");
@@ -77,11 +83,20 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
         <Select label="Duration" options={DURATIONS} value={form.duration} onChange={(e) => set("duration", e.target.value)}/>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <div style={{display:"grid",gridTemplateColumns:".55fr 1.45fr",gap:12}}>
         <Input
           label="Seats" type="number" min={1} max={selected?.capacity ?? 50}
           value={form.seats} onChange={(e) => set("seats", e.target.value)}/>
-        <Select label="Plan" options={PLANS} value={form.plan} onChange={(e) => set("plan", e.target.value)}/>
+        <div style={{marginBottom:16}}>
+          <label style={{display:"block",fontSize:11,letterSpacing:1,textTransform:"uppercase",color:"var(--muted)",marginBottom:6}}>Plan</label>
+          <select value={form.plan} onChange={(e) => set("plan", e.target.value)}
+            style={{width:"100%",padding:"11px 14px",background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:8,color:"var(--text)",fontSize:14,outline:"none"}}>
+            {!plans && <option value="">Loading plans…</option>}
+            {(plans ?? []).map((p) => (
+              <option key={p.id} value={p.name}>{p.name} – {formatINR(p.price)}/{shortPeriod(p.period)}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {err && (

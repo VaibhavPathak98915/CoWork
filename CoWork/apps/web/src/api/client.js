@@ -39,6 +39,7 @@ export const api = {
 
   dashboard: () => apiFetch("/dashboard"),
   spaces: () => apiFetch("/spaces"),
+  plans: () => apiFetch("/plans"),
   createBooking: (payload) => apiFetch("/bookings", { method: "POST", body: payload }),
 };
 

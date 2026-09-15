@@ -72,8 +72,13 @@ const me = await call(jar, "/api/auth/me");
 check("/me returns the signed-in user", me.body?.user?.email === unique, `got ${me.status}`);
 
 const tampered = new Jar();
-tampered.set("cw_session", `${jar.get("cw_session").slice(0, -4)}AAAA`);
-check("tampered cookie is rejected", (await call(tampered, "/api/auth/me")).status === 401);
+const goodCookie = jar.get("cw_session");
+if (goodCookie) {
+  tampered.set("cw_session", `${goodCookie.slice(0, -4)}AAAA`);
+  check("tampered cookie is rejected", (await call(tampered, "/api/auth/me")).status === 401);
+} else {
+  check("tampered cookie is rejected", false, "no session cookie to tamper with");
+}
 check("no cookie at all is rejected", (await call(new Jar(), "/api/auth/me")).status === 401);
 
 /* ── logout ───────────────────────────────────────────────────────────── */
@@ -140,6 +145,29 @@ check("occupancy % equals seats ÷ capacity",
   occ.value === Math.min(100, Math.round((occ.seats / occ.capacity) * 100)),
   `${occ.label}: ${occ.seats}/${occ.capacity} -> ${occ.value}%`);
 check("occupancy never exceeds 100%", dash.occupancy.every((o) => o.value <= 100));
+
+/* ── plans catalog ────────────────────────────────────────────────────── */
+check("/api/plans needs a session", (await call(new Jar(), "/api/plans")).status === 401);
+
+const plans = (await call(session, "/api/plans")).body.plans;
+check("there are exactly 3 plans", plans?.length === 3, `got ${plans?.length}`);
+
+const priced = Object.fromEntries(plans.map((p) => [p.period, p]));
+check("daily plan is ₹499/day", priced.day?.price === 499, JSON.stringify(priced.day?.price));
+check("monthly plan is ₹7,999/month", priced.month?.price === 7999, JSON.stringify(priced.month?.price));
+check("yearly plan is ₹24,999/year", priced.year?.price === 24999, JSON.stringify(priced.year?.price));
+check("each plan has a distinct period", new Set(plans.map((p) => p.period)).size === 3);
+check("exactly one plan is featured", plans.filter((p) => p.featured).length === 1);
+check("features come back as arrays", plans.every((p) => Array.isArray(p.features) && p.features.length > 0));
+check("excluded comes back as an array", plans.every((p) => Array.isArray(p.excluded)));
+
+// The annual plan must genuinely beat paying monthly, or the card's savings line lies.
+const annualised = (p) => ({ day: p.price * 365, month: p.price * 12, year: p.price }[p.period]);
+check("yearly is the cheapest over a year",
+  annualised(priced.year) < annualised(priced.month),
+  `${annualised(priced.year)} vs ${annualised(priced.month)}`);
+check("yearly saves ₹70,989 against monthly",
+  annualised(priced.month) - annualised(priced.year) === 70989);
 
 /* ── SSE + booking creation ───────────────────────────────────────────── */
 const spaces = (await call(session, "/api/spaces")).body.spaces;

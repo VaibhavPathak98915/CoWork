@@ -1,25 +1,46 @@
 import { useState } from "react";
 import { Btn, Card, CardTitle, Input, Select } from "../components/ui.jsx";
+import { usePlans } from "../hooks/usePlans.js";
+import { formatINR } from "../lib/format.js";
+
+/** Fixed extras for now — making add-ons selectable is a separate job. */
+const ADDONS = [
+  { label: "Food Add-on", amount: 250 },
+  { label: "Secure Locker", amount: 500 },
+  { label: "🎉 Member Discount", amount: -250 },
+];
 
 /* ═══════════════════════════════════════════
    PAYMENT
 ═══════════════════════════════════════════ */
-const Payment = ({showToast}) => {
+const Payment = ({showToast, selectedPlanId}) => {
   const [method, setMethod] = useState("Card");
   const [done, setDone] = useState(false);
   const [form, setForm] = useState({name:"",card:"",expiry:"",cvv:"",upi:""});
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const { plans, loading } = usePlans();
+
+  // Arriving from the sidebar rather than "Select Plan" means nothing was
+  // chosen; fall back to the featured plan rather than showing an empty bill.
+  const plan = plans?.find((p) => p.id === selectedPlanId)
+    ?? plans?.find((p) => p.featured)
+    ?? plans?.[0];
+
+  const lines = plan ? [{ label: `${plan.name} Plan`, amount: plan.price }, ...ADDONS] : [];
+  const total = lines.reduce((sum, l) => sum + l.amount, 0);
 
   const handlePay = () => {
     setDone(true);
-    showToast("✅ Payment of ₹8,499 successful!");
+    showToast(`✅ Payment of ${formatINR(total)} successful!`);
   };
 
   if(done) return (
     <div className="fade-in" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"60vh",gap:20}}>
       <div style={{fontSize:72}} className="float">✅</div>
       <div style={{fontFamily:"'Syne',sans-serif",fontSize:28,fontWeight:800}}>Payment Successful!</div>
-      <div style={{color:"var(--muted)",fontSize:14}}>₹8,499 · Monthly Flex Plan · Apr 2026</div>
+      <div style={{color:"var(--muted)",fontSize:14}}>
+        {formatINR(total)} · {plan?.name} Plan · billed {plan?.period === "day" ? "daily" : plan?.period === "month" ? "monthly" : "yearly"}
+      </div>
       <Btn onClick={()=>setDone(false)}>Make Another Payment</Btn>
     </div>
   );
@@ -56,7 +77,7 @@ const Payment = ({showToast}) => {
             style={{width:"100%",padding:14,borderRadius:10,border:"none",cursor:"pointer",fontFamily:"'Syne',sans-serif",fontSize:16,fontWeight:700,background:"var(--accent)",color:"#0a0a0a",marginTop:4,transition:"all .2s"}}
             onMouseEnter={e=>e.target.style.background="#f0b055"}
             onMouseLeave={e=>e.target.style.background="var(--accent)"}>
-            Pay ₹8,499 →
+            {loading ? "Loading…" : `Pay ${formatINR(total)} →`}
           </button>
         </Card>
       </div>
@@ -64,14 +85,16 @@ const Payment = ({showToast}) => {
       <div>
         <div style={{background:"var(--surface2)",borderRadius:12,padding:22,border:"1px solid var(--border)",marginBottom:16}}>
           <CardTitle>Order Summary</CardTitle>
-          {[["Monthly Flex Plan","₹7,999"],["Food Add-on","₹250"],["Secure Locker","₹500"],["🎉 Member Discount","– ₹250"]].map(([k,v],i)=>(
-            <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"8px 0",borderBottom:"1px solid var(--border)",color:k.startsWith("🎉")?"var(--green)":"var(--text)"}}>
-              <span style={{color:"var(--muted)"}}>{k}</span><span>{v}</span>
+          {loading && <div style={{fontSize:13,color:"var(--muted)",padding:"8px 0"}}>Loading plan…</div>}
+          {lines.map((l,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"8px 0",borderBottom:"1px solid var(--border)",color:l.amount<0?"var(--green)":"var(--text)"}}>
+              <span style={{color:"var(--muted)"}}>{l.label}</span>
+              <span>{l.amount < 0 ? `– ${formatINR(Math.abs(l.amount))}` : formatINR(l.amount)}</span>
             </div>
           ))}
           <div style={{height:1,background:"var(--border)",margin:"12px 0"}}/>
           <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:15,color:"var(--accent)"}}>
-            <span>Total</span><span>₹8,499</span>
+            <span>Total</span><span>{formatINR(total)}</span>
           </div>
         </div>
         <Card style={{background:"linear-gradient(145deg,#1a1408,var(--surface))"}}>
@@ -79,7 +102,7 @@ const Payment = ({showToast}) => {
             <div style={{fontSize:32}}>⭐</div>
             <div>
               <div style={{fontWeight:700,fontSize:14}}>Gold Member</div>
-              <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>You'll earn 84 pts for this purchase</div>
+              <div style={{fontSize:12,color:"var(--muted)",marginTop:3}}>You'll earn {Math.round(total/100)} pts for this purchase</div>
             </div>
           </div>
         </Card>
