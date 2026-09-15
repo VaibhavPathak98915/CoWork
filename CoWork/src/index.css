@@ -1,0 +1,22 @@
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#09090b;--surface:#111113;--surface2:#1a1a1e;--surface3:#222228;
+  --border:#2a2a32;--accent:#e8a045;--accent2:#ff6b35;
+  --text:#f0ede8;--muted:#77767e;--green:#4ade80;--red:#f87171;
+  --purple:#c084fc;--blue:#60a5fa;
+}
+html,body,#root{height:100%;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+input,select,textarea{font-family:'DM Sans',sans-serif;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes barGrow{from{height:0}to{height:var(--h)}}
+.fade-up{animation:fadeUp .4s ease both}
+.fade-in{animation:fadeIn .3s ease both}
+.float{animation:float 4s ease-in-out infinite}
