@@ -4,6 +4,14 @@ dist-ssr
 *.local
 .vite
 
+# secrets & per-service databases
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+data/
+
 .DS_Store
 .idea
 .vscode/*

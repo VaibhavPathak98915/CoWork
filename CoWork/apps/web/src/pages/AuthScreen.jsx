@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { Input } from "../components/ui.jsx";
+import { useAuth } from "../auth/AuthProvider.jsx";
 
 /* ═══════════════════════════════════════════
    AUTH SCREEN
 ═══════════════════════════════════════════ */
-const AuthScreen = ({onAuth}) => {
+const AuthScreen = () => {
+  const { login, register } = useAuth();
   const [tab, setTab] = useState("login");
   const [form, setForm] = useState({name:"",email:"",password:"",confirm:"",role:"User"});
   const [loading, setLoading] = useState(false);
@@ -57,17 +59,30 @@ const AuthScreen = ({onAuth}) => {
 
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setErr("");
+
+    // Cheap client-side checks first, so obvious mistakes never cost a round trip.
+    // The server re-validates everything regardless — see packages/shared/schemas.js.
     if(tab==="login"){
       if(!form.email||!form.password){ setErr("Please fill in all fields."); return; }
-      setLoading(true);
-      setTimeout(()=>{ setLoading(false); onAuth({name: form.email.split("@")[0], role: form.email.includes("admin")?"Admin":"User"}); },1200);
     } else {
       if(!form.name||!form.email||!form.password){ setErr("Please fill in all fields."); return; }
       if(form.password!==form.confirm){ setErr("Passwords don't match."); return; }
-      setLoading(true);
-      setTimeout(()=>{ setLoading(false); onAuth({name:form.name, role:form.role}); },1400);
+    }
+
+    setLoading(true);
+    try {
+      if(tab==="login"){
+        await login({email:form.email, password:form.password});
+      } else {
+        await register({name:form.name, email:form.email, password:form.password, role:form.role});
+      }
+      // On success AuthProvider sets the user and <Root> swaps this screen out,
+      // so there is nothing to do here — and no setState on an unmounted tree.
+    } catch (e) {
+      setErr(e.message);
+      setLoading(false);
     }
   };
 
@@ -115,6 +130,9 @@ const AuthScreen = ({onAuth}) => {
           {tab==="register" && (
             <>
               <Input label="Full Name" placeholder="Rahul Sharma" value={form.name} onChange={e=>set("name",e.target.value)}/>
+              {/* SECURITY: anyone can register as Admin here. Fine for the demo,
+                  but this must become an invite or promotion flow before the app
+                  is exposed to real users. Server-side rule: shared/schemas.js. */}
               <div style={{marginBottom:16}}>
                 <label style={{display:"block",fontSize:11,letterSpacing:1,textTransform:"uppercase",color:"var(--muted)",marginBottom:6}}>Account Type</label>
                 <div style={{display:"flex",gap:10}}>
@@ -153,7 +171,7 @@ const AuthScreen = ({onAuth}) => {
 
           {tab==="login" && (
             <div style={{marginTop:20,padding:"14px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)",fontSize:12,color:"var(--muted)"}}>
-              💡 <strong style={{color:"var(--text)"}}>Demo:</strong> Use any email/password. Use <em>admin@...</em> for admin role.
+              💡 <strong style={{color:"var(--text)"}}>Demo account:</strong> <em>admin@cowork.dev</em> / <em>cowork123</em>
             </div>
           )}
         </div>
