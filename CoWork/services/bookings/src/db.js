@@ -65,6 +65,15 @@ export function insertBooking(booking) {
   return toBooking(db.prepare("SELECT * FROM bookings WHERE id = ?").get(row.id));
 }
 
+/** Seats already committed for one space on one day. The denominator of "free". */
+export const seatsBookedFor = (spaceId, date) =>
+  db
+    .prepare(
+      `SELECT COALESCE(SUM(seats), 0) AS seats
+       FROM bookings WHERE space_id = ? AND starts_on = ? AND status != 'expired'`
+    )
+    .get(spaceId, date).seats;
+
 export const recentBookings = (limit = 5) =>
   db.prepare("SELECT * FROM bookings ORDER BY created_at DESC LIMIT ?").all(limit).map(toBooking);
 
@@ -79,6 +88,16 @@ export const stats = (userId) => ({
   mine: userId
     ? db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE user_id = ?").get(userId).n
     : 0,
+  // Seats in use today per individual space — what the Spaces page counts down.
+  // Kept separate from seatsByType: one type may hold several spaces, and today
+  // they line up only because each type happens to have exactly one.
+  seatsBySpace: db
+    .prepare(
+      `SELECT space_id AS id, SUM(seats) AS seats
+       FROM bookings WHERE starts_on = ? AND status != 'expired' GROUP BY space_id`
+    )
+    .all(today())
+    .reduce((acc, r) => ({ ...acc, [r.id]: r.seats }), {}),
   // Seats in use today per space type — the numerator for occupancy.
   seatsByType: db
     .prepare(

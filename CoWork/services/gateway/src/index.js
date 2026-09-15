@@ -7,7 +7,7 @@ import {
 } from "@cowork/shared";
 import { setSessionCookie, clearSessionCookie, requireAuth } from "./session.js";
 import { rateLimit } from "./rateLimit.js";
-import { composeDashboard } from "./dashboard.js";
+import { composeDashboard, composeSpaces } from "./dashboard.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -94,8 +94,8 @@ app.get(
 app.get(
   "/api/spaces",
   requireAuth,
-  asyncHandler(async (_req, res) => {
-    res.json(await serviceFetch(`${env.spacesServiceUrl}/spaces`, {}, "spaces"));
+  asyncHandler(async (req, res) => {
+    res.json(await composeSpaces(req.session.userId));
   })
 );
 

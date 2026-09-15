@@ -82,3 +82,43 @@ const describeDelta = (today, yesterday) => {
   if (diff === 0) return "Same as yesterday";
   return diff > 0 ? `↑ ${diff} from yesterday` : `↓ ${Math.abs(diff)} from yesterday`;
 };
+
+/**
+ * The space catalogue with today's availability folded in.
+ *
+ * Composed here rather than in either service: spaces owns what exists, bookings
+ * owns what is taken, and neither should have to know about the other. If
+ * bookings is unreachable the catalogue still returns, with seatsFree null —
+ * unknown availability, never a fabricated "all free".
+ */
+export async function composeSpaces(userId) {
+  const [catalog, stats] = await Promise.allSettled([
+    serviceFetch(`${env.spacesServiceUrl}/spaces`, {}, "spaces"),
+    serviceFetch(`${env.bookingsServiceUrl}/bookings/stats`, { headers: { "x-user-id": userId } }, "bookings"),
+  ]);
+
+  // A missing catalogue is fatal for this endpoint — there is nothing to show.
+  if (catalog.status === "rejected") throw catalog.reason;
+
+  const seatsBySpace = stats.status === "fulfilled" ? stats.value.stats.seatsBySpace ?? {} : null;
+
+  const spaces = catalog.value.spaces.map((space) => {
+    if (seatsBySpace === null) {
+      return { ...space, seatsTaken: null, seatsFree: null, availability: "unknown" };
+    }
+    const seatsTaken = seatsBySpace[space.id] ?? 0;
+    const seatsFree = Math.max(0, space.capacity - seatsTaken);
+    return {
+      ...space,
+      seatsTaken,
+      seatsFree,
+      availability:
+        space.status !== "active" ? "unavailable"
+        : seatsFree === 0 ? "full"
+        : seatsFree <= space.capacity * 0.25 ? "filling"
+        : "available",
+    };
+  });
+
+  return { spaces, degraded: seatsBySpace === null ? ["bookings"] : [] };
+}

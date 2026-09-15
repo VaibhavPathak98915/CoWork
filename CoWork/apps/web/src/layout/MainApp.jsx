@@ -26,6 +26,8 @@ const MainApp = ({user, onLogout}) => {
   // Chosen on the Plans page, read by Payment — the two screens are siblings,
   // so the selection lives in their common parent.
   const [selectedPlanId, setSelectedPlanId] = useState(null);
+  // Set by the Spaces page to open the booking modal on a specific space.
+  const [bookingSpaceId, setBookingSpaceId] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [toast, setToast] = useState({msg:"",visible:false});
   const toastTimer = useRef(null);
@@ -103,14 +105,19 @@ const MainApp = ({user, onLogout}) => {
             showToast={showToast}
             selectedPlanId={selectedPlanId}
             setSelectedPlanId={setSelectedPlanId}
+            setBookingSpaceId={setBookingSpaceId}
           />
         </div>
       </main>
 
       <BookSpaceModal
-        open={modalOpen}
-        onClose={()=>setModalOpen(false)}
-        onBooked={(booking)=>showToast(`✅ ${booking.spaceName} booked for ${booking.startsOn}`)}
+        open={modalOpen || bookingSpaceId !== null}
+        initialSpaceId={bookingSpaceId}
+        onClose={()=>{setModalOpen(false);setBookingSpaceId(null)}}
+        onBooked={(booking)=>{
+          setBookingSpaceId(null);
+          showToast(`✅ ${booking.spaceName} booked for ${booking.startsOn}`);
+        }}
       />
 
       <Toast msg={toast.msg} visible={toast.visible}/>

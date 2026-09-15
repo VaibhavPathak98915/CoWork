@@ -170,8 +170,17 @@ check("yearly saves ₹70,989 against monthly",
   annualised(priced.month) - annualised(priced.year) === 70989);
 
 /* ── SSE + booking creation ───────────────────────────────────────────── */
-const spaces = (await call(session, "/api/spaces")).body.spaces;
+const spacesBody = (await call(session, "/api/spaces")).body;
+const spaces = spacesBody.spaces;
 check("space catalog is served", spaces?.length === 5);
+check("catalog carries availability", spaces.every((s) =>
+  Number.isInteger(s.seatsTaken) && Number.isInteger(s.seatsFree) && typeof s.availability === "string"));
+check("seatsFree = capacity − seatsTaken for every space",
+  spaces.every((s) => s.seatsFree === Math.max(0, s.capacity - s.seatsTaken)));
+check("availability matches the seat counts", spaces.every((s) =>
+  s.availability === (s.status !== "active" ? "unavailable"
+    : s.seatsFree === 0 ? "full"
+    : s.seatsFree <= s.capacity * 0.25 ? "filling" : "available")));
 
 // Open the event stream BEFORE booking, the way a dashboard sitting open would.
 const streamed = [];
@@ -215,6 +224,48 @@ check("occupancy rose for that space type",
   after.occupancy.find((o) => o.label === spaces[0].type).seats ===
     dash.occupancy.find((o) => o.label === spaces[0].type).seats + 2);
 check("membership points track the user's bookings", after.membership.points === after.membership.bookings * 10);
+
+/* ── seat availability is enforced, not just displayed ────────────────── */
+// Regression: the service used to compare one booking against total capacity and
+// never against what was already taken, so a space could be booked past full one
+// booking at a time (observed: 80 seats sold in a 60-seat room).
+const target = (await call(session, "/api/spaces")).body.spaces.find((s) => s.seatsFree > 1);
+
+const overshoot = await call(session, "/api/bookings", {
+  method: "POST",
+  body: { spaceId: target.id, plan: "Day Pass", duration: "Full Day", startsOn: today, seats: target.seatsFree + 1 },
+});
+check("booking one seat more than is free is refused", overshoot.status === 409,
+  `${target.name}: ${target.seatsFree} free, asked ${target.seatsFree + 1}, got ${overshoot.status}`);
+check("the refusal says how many seats remain",
+  /\d+ seats? left|fully booked/i.test(overshoot.body?.error?.message ?? ""), overshoot.body?.error?.message);
+
+const exact = await call(session, "/api/bookings", {
+  method: "POST",
+  body: { spaceId: target.id, plan: "Day Pass", duration: "Full Day", startsOn: today, seats: target.seatsFree },
+});
+check("booking exactly the free seats succeeds", exact.status === 201, `got ${exact.status}`);
+
+const nowFull = (await call(session, "/api/spaces")).body.spaces.find((s) => s.id === target.id);
+check("that space is now full", nowFull.seatsFree === 0 && nowFull.availability === "full",
+  `${nowFull.seatsFree} free, ${nowFull.availability}`);
+
+const oneMore = await call(session, "/api/bookings", {
+  method: "POST",
+  body: { spaceId: target.id, plan: "Day Pass", duration: "Full Day", startsOn: today, seats: 1 },
+});
+check("a full space refuses even one seat", oneMore.status === 409, `got ${oneMore.status}`);
+check("total booked never exceeds capacity",
+  nowFull.seatsTaken <= nowFull.capacity, `${nowFull.seatsTaken}/${nowFull.capacity}`);
+
+// Tomorrow is a different day, so the same space is bookable again.
+const tomorrow = (() => { const d = new Date(Date.now() + 86400000), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
+const nextDay = await call(session, "/api/bookings", {
+  method: "POST",
+  body: { spaceId: target.id, plan: "Day Pass", duration: "Full Day", startsOn: tomorrow, seats: 1 },
+});
+check("a space full today is still bookable tomorrow", nextDay.status === 201, `got ${nextDay.status}`);
 
 /* ── booking validation ───────────────────────────────────────────────── */
 const past = await call(session, "/api/bookings", {

@@ -28,7 +28,7 @@ apps/web/           React 19 + Vite. Proxies /api → gateway, so the browser
 services/gateway/   :4000  The only entry point. Owns the session cookie, composes
                     the dashboard, proxies the live event stream.
 services/auth/      :4001  Accounts. Owns data/auth.db and nothing else reads it.
-services/spaces/    :4002  Space catalog, capacity, and the plan catalog.
+services/spaces/    :4002  Space catalogue, capacity, and the plan catalogue.
                     Owns data/spaces.db.
 services/bookings/  :4003  Reservations + the SSE feed. Owns data/bookings.db.
 packages/shared/    env, JWT sign/verify, HTTP errors, zod schemas — the contract
@@ -71,6 +71,17 @@ One membership, three commitment periods — ₹499/day, ₹7,999/month, ₹24,9
 plans live in the spaces service and are served at `/api/plans`; the Plans page, the booking
 modal and the Payment summary all read from there, so a price changes in exactly one place.
 The "save ₹70,989 a year" line is computed from the other plans, never typed in.
+
+## Spaces and availability
+
+`GET /api/spaces` is composed at the gateway: the catalogue comes from spaces, today's
+booked seats from bookings, and each space gets `seatsTaken` / `seatsFree` / `availability`
+(`available` / `filling` / `full` / `unavailable`). With bookings down the catalogue still
+returns, with `seatsFree: null` — unknown availability, never a fabricated "all free".
+
+Availability is **enforced**, not just displayed: the bookings service checks a request
+against seats already taken for that space and date and answers 409 with how many remain.
+Before that check existed, a 60-seat room could be sold 80 seats one booking at a time.
 
 ## Adding a service
 

@@ -3,7 +3,7 @@ import {
   ApiError, asyncHandler, errorHandler, notFound,
   env, serviceFetch, createBookingSchema,
 } from "@cowork/shared";
-import { db, seed, insertBooking, recentBookings, stats } from "./db.js";
+import { db, seed, insertBooking, recentBookings, seatsBookedFor, stats } from "./db.js";
 import { publish, attachStream } from "./events.js";
 
 const app = express();
@@ -48,8 +48,22 @@ app.post(
       {},
       "spaces"
     );
-    if (input.seats > space.capacity) {
-      throw ApiError.badRequest(`${space.name} seats only ${space.capacity}`, "OVER_CAPACITY");
+    if (space.status !== "active") {
+      throw ApiError.conflict(`${space.name} is not available for booking`, "SPACE_INACTIVE");
+    }
+
+    // Against what is already taken, not against total capacity. Checking only
+    // the latter let a space be booked past full, one booking at a time — the
+    // seat counts on screen would have been fiction.
+    const taken = seatsBookedFor(space.id, input.startsOn);
+    const free = space.capacity - taken;
+    if (input.seats > free) {
+      throw ApiError.conflict(
+        free === 0
+          ? `${space.name} is fully booked on ${input.startsOn}`
+          : `Only ${free} seat${free === 1 ? "" : "s"} left in ${space.name} on ${input.startsOn}`,
+        "NO_SEATS"
+      );
     }
 
     const booking = insertBooking({

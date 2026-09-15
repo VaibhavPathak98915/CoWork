@@ -11,7 +11,7 @@ import { localDate } from "@cowork/shared/dates";
 // service agree on which day "today" is.
 const todayStr = localDate;
 
-export default function BookSpaceModal({ open, onClose, onBooked }) {
+export default function BookSpaceModal({ open, onClose, onBooked, initialSpaceId = null }) {
   const [spaces, setSpaces] = useState([]);
   const [spacesError, setSpacesError] = useState("");
   const [loadingSpaces, setLoadingSpaces] = useState(false);
@@ -28,7 +28,7 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
     try {
       const { spaces } = await api.spaces();
       setSpaces(spaces);
-      if (spaces[0]) set("spaceId", spaces[0].id);
+      if (spaces[0]) setForm((f) => ({ ...f, spaceId: f.spaceId || spaces[0].id }));
     } catch (e) {
       setSpacesError(e.message);
       setSpaces([]);
@@ -46,6 +46,11 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
   }, [open, spaces.length, loadSpaces]);
 
   useEffect(() => { if (open) setErr(""); }, [open]);
+
+  // Opened from a Spaces card: select that space rather than the first one.
+  useEffect(() => {
+    if (open && initialSpaceId) set("spaceId", initialSpaceId);
+  }, [open, initialSpaceId]);
 
   const catalogError = spacesError || plansError;
   const retryCatalog = () => { loadSpaces(); refreshPlans(); };
@@ -79,6 +84,9 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
   };
 
   const selected = spaces.find((s) => s.id === form.spaceId);
+  // seatsFree is null when the bookings service is unreachable; fall back to
+  // capacity rather than blocking the field entirely.
+  const maxSeats = selected ? selected.seatsFree ?? selected.capacity : 50;
 
   return (
     <Modal open={open} onClose={onClose} title="Book a Space">
@@ -94,7 +102,9 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
             </option>
           )}
           {spaces.map((s) => (
-            <option key={s.id} value={s.id}>{s.icon} {s.name} — {s.type} ({s.capacity} seats)</option>
+            <option key={s.id} value={s.id}>
+              {s.icon} {s.name} — {s.seatsFree == null ? `${s.capacity} seats` : `${s.seatsFree} of ${s.capacity} free`}
+            </option>
           ))}
         </select>
       </div>
@@ -106,7 +116,7 @@ export default function BookSpaceModal({ open, onClose, onBooked }) {
 
       <div style={{display:"grid",gridTemplateColumns:".55fr 1.45fr",gap:12}}>
         <Input
-          label="Seats" type="number" min={1} max={selected?.capacity ?? 50}
+          label="Seats" type="number" min={1} max={maxSeats}
           value={form.seats} onChange={(e) => set("seats", e.target.value)}/>
         <div style={{marginBottom:16}}>
           <label style={{display:"block",fontSize:11,letterSpacing:1,textTransform:"uppercase",color:"var(--muted)",marginBottom:6}}>Plan</label>
