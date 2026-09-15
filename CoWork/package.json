@@ -9,12 +9,14 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n web,gateway,auth -c cyan,magenta,yellow \"npm:dev:web\" \"npm:dev:gateway\" \"npm:dev:auth\"",
+    "dev": "concurrently -n web,gateway,auth,spaces,bookings -c cyan,magenta,yellow,green,blue \"npm:dev:web\" \"npm:dev:gateway\" \"npm:dev:auth\" \"npm:dev:spaces\" \"npm:dev:bookings\"",
     "dev:web": "npm run dev --workspace @cowork/web",
     "dev:gateway": "npm run dev --workspace @cowork/gateway",
     "dev:auth": "npm run dev --workspace @cowork/auth",
     "build": "npm run build --workspace @cowork/web",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "dev:spaces": "npm run dev --workspace @cowork/spaces",
+    "dev:bookings": "npm run dev --workspace @cowork/bookings"
   },
   "devDependencies": {
     "concurrently": "^10.0.5"

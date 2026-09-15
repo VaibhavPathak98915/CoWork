@@ -1,11 +1,13 @@
 import express from "express";
 import cookieParser from "cookie-parser";
+import { createProxyMiddleware } from "http-proxy-middleware";
 import {
   ApiError, asyncHandler, errorHandler, notFound,
   env, serviceFetch, SESSION_COOKIE,
 } from "@cowork/shared";
 import { setSessionCookie, clearSessionCookie, requireAuth } from "./session.js";
 import { rateLimit } from "./rateLimit.js";
+import { composeDashboard } from "./dashboard.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -63,26 +65,88 @@ app.get(
 app.get(
   "/api/health",
   asyncHandler(async (_req, res) => {
-    const downstream = await auth("/health").catch((err) => ({ service: "auth", status: "down", error: err.message }));
-    res.json({ service: "gateway", status: "ok", services: [downstream] });
+    const targets = [
+      ["auth", env.authServiceUrl],
+      ["spaces", env.spacesServiceUrl],
+      ["bookings", env.bookingsServiceUrl],
+    ];
+    const services = await Promise.all(
+      targets.map(([name, url]) =>
+        serviceFetch(`${url}/health`, {}, name).catch((err) => ({
+          service: name, status: "down", error: err.message,
+        }))
+      )
+    );
+    res.json({ service: "gateway", status: "ok", services });
+  })
+);
+
+/* ── dashboard ────────────────────────────────────────────────────────── */
+
+app.get(
+  "/api/dashboard",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    res.json(await composeDashboard(req.session.userId));
+  })
+);
+
+app.get(
+  "/api/spaces",
+  requireAuth,
+  asyncHandler(async (_req, res) => {
+    res.json(await serviceFetch(`${env.spacesServiceUrl}/spaces`, {}, "spaces"));
+  })
+);
+
+app.post(
+  "/api/bookings",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    // The booking row snapshots who made it, so resolve the display name once
+    // here rather than making the bookings service depend on auth.
+    const { user } = await auth(`/users/${req.session.userId}`);
+    const result = await serviceFetch(
+      `${env.bookingsServiceUrl}/bookings`,
+      {
+        method: "POST",
+        body: JSON.stringify(req.body),
+        headers: { ...req.serviceHeaders, "x-user-name": user.name },
+      },
+      "bookings"
+    );
+    res.status(201).json(result);
+  })
+);
+
+/**
+ * Live updates. The browser opens one EventSource here; the gateway streams the
+ * bookings service's event feed straight through, having checked the session
+ * cookie first. Services never face the internet, even for SSE.
+ */
+app.use(
+  "/api/events",
+  requireAuth,
+  createProxyMiddleware({
+    target: env.bookingsServiceUrl,
+    changeOrigin: true,
+    // app.use() strips the mount path before the proxy sees the request, so
+    // req.url is already "/" here — a "^/api/events" regex would never match.
+    pathRewrite: () => "/events",
+    on: {
+      proxyReq: (proxyReq, req) => {
+        for (const [key, val] of Object.entries(req.serviceHeaders ?? {})) {
+          proxyReq.setHeader(key, val);
+        }
+      },
+    },
   })
 );
 
 /*
- * Adding a service — the whole point of this layout. A bookings team writes
- * services/bookings, then adds two lines here and nothing else:
- *
- *   import { createProxyMiddleware } from "http-proxy-middleware";
- *   app.use("/api/bookings", requireAuth, createProxyMiddleware({
- *     target: env.bookingsServiceUrl,
- *     changeOrigin: true,
- *     pathRewrite: { "^/api/bookings": "" },
- *     on: { proxyReq: (proxyReq, req) => {
- *       for (const [k, v] of Object.entries(req.serviceHeaders)) proxyReq.setHeader(k, v);
- *     }},
- *   }));
- *
- * Their service reads x-user-id / x-user-role and writes no auth code at all.
+ * Adding a service: see /api/events and /api/bookings above for the two shapes —
+ * proxy the whole surface through, or compose it here. Either way the service
+ * reads x-user-id / x-user-role and writes no auth code. README has the steps.
  */
 
 app.use(notFound);

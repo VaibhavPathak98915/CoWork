@@ -120,5 +120,89 @@ db.close();
 check("password stored as a scrypt hash", row?.password_hash?.startsWith("scrypt$"), row?.password_hash?.slice(0, 20));
 check("plaintext password never stored", !row?.password_hash?.includes("cowork123"));
 
+/* ── dashboard composition ────────────────────────────────────────────── */
+const session = new Jar();
+await call(session, "/api/auth/login", { method: "POST", body: { email: "admin@cowork.dev", password: "cowork123" } });
+
+check("/api/dashboard needs a session", (await call(new Jar(), "/api/dashboard")).status === 401);
+check("/api/bookings needs a session",
+  (await call(new Jar(), "/api/bookings", { method: "POST", body: {} })).status === 401);
+
+const dash = (await call(session, "/api/dashboard")).body;
+check("dashboard composes all three services", dash?.degraded?.length === 0, JSON.stringify(dash?.degraded));
+check("member count is a real number", Number.isInteger(dash?.stats?.[0]?.value));
+check("bookings-today is a real number", Number.isInteger(dash?.stats?.[1]?.value));
+check("recent bookings are populated", Array.isArray(dash?.recentBookings) && dash.recentBookings.length > 0);
+check("occupancy covers every space type", dash?.occupancy?.length === 5, `got ${dash?.occupancy?.length}`);
+
+const occ = dash.occupancy.find((o) => o.capacity > 0);
+check("occupancy % equals seats ÷ capacity",
+  occ.value === Math.min(100, Math.round((occ.seats / occ.capacity) * 100)),
+  `${occ.label}: ${occ.seats}/${occ.capacity} -> ${occ.value}%`);
+check("occupancy never exceeds 100%", dash.occupancy.every((o) => o.value <= 100));
+
+/* ── SSE + booking creation ───────────────────────────────────────────── */
+const spaces = (await call(session, "/api/spaces")).body.spaces;
+check("space catalog is served", spaces?.length === 5);
+
+// Open the event stream BEFORE booking, the way a dashboard sitting open would.
+const streamed = [];
+const controller = new AbortController();
+const stream = await fetch(`${GATEWAY}/api/events`, {
+  headers: { cookie: session.header, accept: "text/event-stream" },
+  signal: controller.signal,
+});
+check("event stream is text/event-stream",
+  stream.headers.get("content-type")?.includes("text/event-stream"), stream.headers.get("content-type"));
+
+(async () => {
+  const decoder = new TextDecoder();
+  for await (const chunk of stream.body) {
+    const text = decoder.decode(chunk, { stream: true });
+    for (const line of text.split("\n")) if (line.startsWith("event:")) streamed.push(line.slice(6).trim());
+  }
+})().catch(() => {});
+
+const before = dash.stats[1].value;
+const today = (() => { const d = new Date(), p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
+
+const created = await call(session, "/api/bookings", {
+  method: "POST",
+  body: { spaceId: spaces[0].id, plan: "Day Pass – ₹499", duration: "Full Day", startsOn: today, seats: 2 },
+});
+check("booking is created", created.status === 201, `got ${created.status} ${JSON.stringify(created.body)}`);
+check("booking snapshots the member name", created.body?.booking?.userName === "Vaibhav", created.body?.booking?.userName);
+check("booking snapshots the space name", created.body?.booking?.spaceName === spaces[0].name);
+
+await new Promise((r) => setTimeout(r, 1500));
+check("SSE delivered booking.created within 1.5s", streamed.includes("booking.created"), JSON.stringify(streamed));
+controller.abort();
+
+const after = (await call(session, "/api/dashboard")).body;
+check("bookings-today incremented by exactly 1", after.stats[1].value === before + 1,
+  `${before} -> ${after.stats[1].value}`);
+check("new booking is first in recent bookings", after.recentBookings[0].id === created.body.booking.id);
+check("occupancy rose for that space type",
+  after.occupancy.find((o) => o.label === spaces[0].type).seats ===
+    dash.occupancy.find((o) => o.label === spaces[0].type).seats + 2);
+check("membership points track the user's bookings", after.membership.points === after.membership.bookings * 10);
+
+/* ── booking validation ───────────────────────────────────────────────── */
+const past = await call(session, "/api/bookings", {
+  method: "POST", body: { spaceId: spaces[0].id, plan: "Day Pass", duration: "Full Day", startsOn: "2020-01-01", seats: 1 },
+});
+check("a booking in the past is rejected", past.status === 400, `got ${past.status}`);
+
+const overCapacity = await call(session, "/api/bookings", {
+  method: "POST", body: { spaceId: spaces[0].id, plan: "Day Pass", duration: "Full Day", startsOn: today, seats: 999 },
+});
+check("over-capacity booking is rejected", overCapacity.status === 400, `got ${overCapacity.status}`);
+
+const badSpace = await call(session, "/api/bookings", {
+  method: "POST", body: { spaceId: "no-such-space", plan: "Day Pass", duration: "Full Day", startsOn: today, seats: 1 },
+});
+check("unknown space is rejected", badSpace.status === 404, `got ${badSpace.status}`);
+
 console.log(`\n${passed}/${passed + failed} checks passed`);
 process.exit(failed ? 1 : 0);

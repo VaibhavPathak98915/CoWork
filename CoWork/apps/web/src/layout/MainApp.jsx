@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
-import { Btn, Input, Select } from "../components/ui.jsx";
+import { Btn } from "../components/ui.jsx";
 import Toast from "../components/Toast.jsx";
-import Modal from "../components/Modal.jsx";
+import BookSpaceModal from "./BookSpaceModal.jsx";
 import Dashboard from "../pages/Dashboard.jsx";
 import Plans from "../pages/Plans.jsx";
 import Spaces from "../pages/Spaces.jsx";
@@ -99,19 +99,11 @@ const MainApp = ({user, onLogout}) => {
         </div>
       </main>
 
-      {/* Book Space Modal */}
-      <Modal open={modalOpen} onClose={()=>setModalOpen(false)} title="Book a Space">
-        <Select label="Space Type" options={["Open Desk","Private Cabin","Meeting Room","Conference Hall","Podcast Studio","Maker Lab"]}/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <Input label="Date" type="date" defaultValue="2026-04-04"/>
-          <Select label="Duration" options={["1 Hour","Half Day","Full Day","Monthly"]}/>
-        </div>
-        <Select label="Plan" options={["Day Pass – ₹499","Monthly Flex – ₹7,999","Private Office – ₹24,999"]}/>
-        <Btn variant="primary" style={{width:"100%",textAlign:"center",padding:13,fontSize:14,marginTop:4}}
-          onClick={()=>{setModalOpen(false);showToast("✅ Space booked successfully!")}}>
-          Confirm Booking →
-        </Btn>
-      </Modal>
+      <BookSpaceModal
+        open={modalOpen}
+        onClose={()=>setModalOpen(false)}
+        onBooked={(booking)=>showToast(`✅ ${booking.spaceName} booked for ${booking.startsOn}`)}
+      />
 
       <Toast msg={toast.msg} visible={toast.visible}/>
     </div>

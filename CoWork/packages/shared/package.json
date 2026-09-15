@@ -5,7 +5,9 @@
   "type": "module",
   "main": "src/index.js",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./schemas": "./src/schemas.js",
+    "./dates": "./src/dates.js"
   },
   "dependencies": {
     "jose": "^6.2.12",

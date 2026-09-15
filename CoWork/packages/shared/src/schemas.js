@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { localDate } from "./dates.js";
 
 /**
  * Shared by the auth service and the React sign-up form, so the rules the user is
@@ -31,4 +32,20 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email,
   password: z.string().min(1, "Password is required"),
+});
+
+/** Booking creation. Shared so the modal and the service agree on the rules. */
+export const DURATIONS = ["1 Hour", "Half Day", "Full Day", "Monthly"];
+
+export const createBookingSchema = z.object({
+  spaceId: z.string().min(1, "Pick a space"),
+  plan: z.string().trim().min(1, "Pick a plan").max(60),
+  duration: z.enum(DURATIONS),
+  startsOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date")
+    // A booking in the past is almost always a typo, and it would quietly skew
+    // every "today" figure on the dashboard.
+    .refine((d) => d >= localDate(), "Date can't be in the past"),
+  seats: z.number().int().min(1, "At least 1 seat").max(50, "Too many seats").default(1),
 });

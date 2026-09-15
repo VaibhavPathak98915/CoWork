@@ -36,4 +36,11 @@ export const api = {
   login: (payload) => apiFetch("/auth/login", { method: "POST", body: payload }),
   logout: () => apiFetch("/auth/logout", { method: "POST" }),
   me: () => apiFetch("/auth/me"),
+
+  dashboard: () => apiFetch("/dashboard"),
+  spaces: () => apiFetch("/spaces"),
+  createBooking: (payload) => apiFetch("/bookings", { method: "POST", body: payload }),
 };
+
+/** Same-origin through the Vite proxy, so the session cookie is sent for free. */
+export const EVENTS_URL = "/api/events";

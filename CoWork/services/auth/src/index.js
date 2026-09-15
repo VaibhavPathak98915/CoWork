@@ -41,6 +41,17 @@ const createUser = async ({ name, email, password, role }) => {
 
 app.get("/health", (_req, res) => res.json({ service: "auth", status: "ok", users: countUsers() }));
 
+/** Member counts for the dashboard, derived from the created_at column. */
+app.get("/stats", (_req, res) => {
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  const createdThisMonth = db
+    .prepare("SELECT COUNT(*) AS n FROM users WHERE created_at >= ?")
+    .get(monthStart.toISOString()).n;
+  res.json({ stats: { total: countUsers(), createdThisMonth } });
+});
+
 app.post(
   "/register",
   asyncHandler(async (req, res) => {

@@ -8,6 +8,7 @@ Coworking-space management app. React frontend, microservices backend, one repo.
 npm install          # once, from this directory — installs every workspace
 cp .env.example .env # then set JWT_SECRET:  openssl rand -hex 32
 npm run dev          # web :5173 · gateway :4000 · auth :4001
+                     #            · spaces :4002 · bookings :4003
 ```
 
 Open http://localhost:5173 and sign in with the seeded account:
@@ -24,9 +25,11 @@ Individual pieces: `npm run dev:web`, `npm run dev:gateway`, `npm run dev:auth`.
 ```
 apps/web/           React 19 + Vite. Proxies /api → gateway, so the browser
                     always sees one origin and cookies just work.
-services/gateway/   :4000  The only entry point. Owns the session cookie,
-                    verifies it, forwards identity to services.
+services/gateway/   :4000  The only entry point. Owns the session cookie, composes
+                    the dashboard, proxies the live event stream.
 services/auth/      :4001  Accounts. Owns data/auth.db and nothing else reads it.
+services/spaces/    :4002  Space catalog and capacity. Owns data/spaces.db.
+services/bookings/  :4003  Reservations + the SSE feed. Owns data/bookings.db.
 packages/shared/    env, JWT sign/verify, HTTP errors, zod schemas — the contract
                     every service and the web form share.
 scripts/smoke.mjs   End-to-end API check.
@@ -47,6 +50,19 @@ browser ──/api/*──► gateway :4000 ──► auth :4001 ──► auth.
    to services. Services hold no session state and contain no auth code.
 
 Services bind to `127.0.0.1`, so only the gateway is reachable from outside.
+
+## The live dashboard
+
+`GET /api/dashboard` is one screen assembled from three services. The gateway fans out with
+`Promise.allSettled`, divides booked seats by capacity for occupancy, and returns a single
+payload. Only the gateway knows the dashboard exists — the services never call each other.
+
+Liveness is Server-Sent Events. The bookings service emits `booking.created`; the gateway
+proxies that stream at `/api/events` behind the session check; every open dashboard refetches.
+Book a space in one tab and a second tab updates without a reload.
+
+If a service is down, its card degrades to "—" and a banner names it — deliberately not 0%,
+which would read as "nothing booked" rather than "we don't know".
 
 ## Adding a service
 

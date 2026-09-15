@@ -1,5 +1,5 @@
 {
-  "name": "@cowork/gateway",
+  "name": "@cowork/spaces",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,6 @@
   },
   "dependencies": {
     "@cowork/shared": "*",
-    "cookie-parser": "^1.4.7",
-    "express": "^5.2.1",
-    "http-proxy-middleware": "^4.2.0"
+    "express": "^5.2.1"
   }
 }
