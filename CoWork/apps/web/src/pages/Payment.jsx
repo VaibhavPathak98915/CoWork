@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Btn, Card, CardTitle, Input, Select } from "../components/ui.jsx";
 import { usePlans } from "../hooks/usePlans.js";
+import { useAddons } from "../addons/AddonsProvider.jsx";
 import { formatINR } from "../lib/format.js";
 
-/** Fixed extras for now — making add-ons selectable is a separate job. */
-const ADDONS = [
-  { label: "Food Add-on", amount: 250 },
-  { label: "Secure Locker", amount: 500 },
-  { label: "🎉 Member Discount", amount: -250 },
-];
+/**
+ * A flat promotional discount. Still a fixed number rather than a real rule —
+ * tiers, eligibility and expiry would belong in a billing service.
+ */
+const MEMBER_DISCOUNT = { label: "🎉 Member Discount", amount: -250 };
 
 /* ═══════════════════════════════════════════
    PAYMENT
@@ -19,6 +19,7 @@ const Payment = ({showToast, selectedPlanId}) => {
   const [form, setForm] = useState({name:"",card:"",expiry:"",cvv:"",upi:""});
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const { plans, error: plansError, loading, refresh } = usePlans();
+  const { active: activeAddons } = useAddons();
 
   // Arriving from the sidebar rather than "Select Plan" means nothing was
   // chosen; fall back to the featured plan rather than showing an empty bill.
@@ -26,7 +27,14 @@ const Payment = ({showToast, selectedPlanId}) => {
     ?? plans?.find((p) => p.featured)
     ?? plans?.[0];
 
-  const lines = plan ? [{ label: `${plan.name} Plan`, amount: plan.price }, ...ADDONS] : [];
+  // The bill is what the user actually subscribed to, not a fixed pair of lines.
+  const lines = plan
+    ? [
+        { label: `${plan.name} Plan`, amount: plan.price },
+        ...activeAddons.map((a) => ({ label: `${a.name} (${a.planLabel})`, amount: a.price })),
+        MEMBER_DISCOUNT,
+      ]
+    : [];
   const total = lines.reduce((sum, l) => sum + l.amount, 0);
 
   // Without a catalog there is no price to charge. Rendering a ₹0 order would be

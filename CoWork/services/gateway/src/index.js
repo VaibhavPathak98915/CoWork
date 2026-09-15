@@ -7,7 +7,7 @@ import {
 } from "@cowork/shared";
 import { setSessionCookie, clearSessionCookie, requireAuth } from "./session.js";
 import { rateLimit } from "./rateLimit.js";
-import { composeDashboard, composeSpaces } from "./dashboard.js";
+import { composeDashboard, composeSpaces, composeAddons } from "./dashboard.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -69,6 +69,7 @@ app.get(
       ["auth", env.authServiceUrl],
       ["spaces", env.spacesServiceUrl],
       ["bookings", env.bookingsServiceUrl],
+      ["addons", env.addonsServiceUrl],
     ];
     const services = await Promise.all(
       targets.map(([name, url]) =>
@@ -104,6 +105,42 @@ app.get(
   requireAuth,
   asyncHandler(async (_req, res) => {
     res.json(await serviceFetch(`${env.spacesServiceUrl}/plans`, {}, "spaces"));
+  })
+);
+
+app.get(
+  "/api/addons",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    res.json(await composeAddons(req.session.userId));
+  })
+);
+
+app.post(
+  "/api/addons/:id/subscription",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    res.status(201).json(
+      await serviceFetch(
+        `${env.addonsServiceUrl}/subscriptions`,
+        { method: "POST", body: JSON.stringify({ addonId: req.params.id }), headers: req.serviceHeaders },
+        "add-ons"
+      )
+    );
+  })
+);
+
+app.delete(
+  "/api/addons/:id/subscription",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    res.json(
+      await serviceFetch(
+        `${env.addonsServiceUrl}/subscriptions/${encodeURIComponent(req.params.id)}`,
+        { method: "DELETE", headers: req.serviceHeaders },
+        "add-ons"
+      )
+    );
   })
 );
 

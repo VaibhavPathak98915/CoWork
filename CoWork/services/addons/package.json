@@ -1,0 +1,14 @@
+{
+  "name": "@cowork/addons",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file=../../.env src/index.js",
+    "start": "node --env-file=../../.env src/index.js"
+  },
+  "dependencies": {
+    "@cowork/shared": "*",
+    "express": "^5.2.1"
+  }
+}

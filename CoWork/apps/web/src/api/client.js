@@ -40,6 +40,9 @@ export const api = {
   dashboard: () => apiFetch("/dashboard"),
   spaces: () => apiFetch("/spaces"),
   plans: () => apiFetch("/plans"),
+  addons: () => apiFetch("/addons"),
+  subscribeAddon: (id) => apiFetch(`/addons/${id}/subscription`, { method: "POST" }),
+  unsubscribeAddon: (id) => apiFetch(`/addons/${id}/subscription`, { method: "DELETE" }),
   createBooking: (payload) => apiFetch("/bookings", { method: "POST", body: payload }),
 };
 

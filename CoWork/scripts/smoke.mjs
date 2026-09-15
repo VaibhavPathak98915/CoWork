@@ -204,13 +204,19 @@ const before = dash.stats[1].value;
 const today = (() => { const d = new Date(), p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
 
+// Whichever space has the most room left — assuming spaces[0] is free made the
+// suite fail on its own leftovers once a few runs had booked it out.
+const roomiest = [...spaces].sort((a, b) => b.seatsFree - a.seatsFree)[0];
+check("a space with room exists for today's booking", roomiest.seatsFree >= 2,
+  `most free: ${roomiest.name} ${roomiest.seatsFree}`);
+
 const created = await call(session, "/api/bookings", {
   method: "POST",
-  body: { spaceId: spaces[0].id, plan: "Day Pass – ₹499", duration: "Full Day", startsOn: today, seats: 2 },
+  body: { spaceId: roomiest.id, plan: "Day Pass – ₹499", duration: "Full Day", startsOn: today, seats: 2 },
 });
 check("booking is created", created.status === 201, `got ${created.status} ${JSON.stringify(created.body)}`);
 check("booking snapshots the member name", created.body?.booking?.userName === "Vaibhav", created.body?.booking?.userName);
-check("booking snapshots the space name", created.body?.booking?.spaceName === spaces[0].name);
+check("booking snapshots the space name", created.body?.booking?.spaceName === roomiest.name);
 
 await new Promise((r) => setTimeout(r, 1500));
 check("SSE delivered booking.created within 1.5s", streamed.includes("booking.created"), JSON.stringify(streamed));
@@ -221,51 +227,103 @@ check("bookings-today incremented by exactly 1", after.stats[1].value === before
   `${before} -> ${after.stats[1].value}`);
 check("new booking is first in recent bookings", after.recentBookings[0].id === created.body.booking.id);
 check("occupancy rose for that space type",
-  after.occupancy.find((o) => o.label === spaces[0].type).seats ===
-    dash.occupancy.find((o) => o.label === spaces[0].type).seats + 2);
+  after.occupancy.find((o) => o.label === roomiest.type).seats ===
+    dash.occupancy.find((o) => o.label === roomiest.type).seats + 2);
 check("membership points track the user's bookings", after.membership.points === after.membership.bookings * 10);
 
 /* ── seat availability is enforced, not just displayed ────────────────── */
 // Regression: the service used to compare one booking against total capacity and
 // never against what was already taken, so a space could be booked past full one
 // booking at a time (observed: 80 seats sold in a 60-seat room).
-const target = (await call(session, "/api/spaces")).body.spaces.find((s) => s.seatsFree > 1);
+//
+// Run on a date unique to this run: no bookings exist there, so free == capacity
+// and the suite neither depends on nor consumes today's availability.
+const futureDate = (() => {
+  const d = new Date(Date.now() + (2 + (Date.now() % 300)) * 86400000);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+})();
 
-const overshoot = await call(session, "/api/bookings", {
-  method: "POST",
-  body: { spaceId: target.id, plan: "Day Pass", duration: "Full Day", startsOn: today, seats: target.seatsFree + 1 },
-});
-check("booking one seat more than is free is refused", overshoot.status === 409,
-  `${target.name}: ${target.seatsFree} free, asked ${target.seatsFree + 1}, got ${overshoot.status}`);
-check("the refusal says how many seats remain",
-  /\d+ seats? left|fully booked/i.test(overshoot.body?.error?.message ?? ""), overshoot.body?.error?.message);
+const target = spaces.find((s) => s.capacity <= 50) ?? spaces[0];
+const book = (seats, date = futureDate) =>
+  call(session, "/api/bookings", {
+    method: "POST",
+    body: { spaceId: target.id, plan: "Day Pass", duration: "Full Day", startsOn: date, seats },
+  });
 
-const exact = await call(session, "/api/bookings", {
-  method: "POST",
-  body: { spaceId: target.id, plan: "Day Pass", duration: "Full Day", startsOn: today, seats: target.seatsFree },
-});
-check("booking exactly the free seats succeeds", exact.status === 201, `got ${exact.status}`);
+const overshoot = await book(target.capacity + 1);
+check("booking more than a space holds is refused", overshoot.status === 409,
+  `${target.name} holds ${target.capacity}, asked ${target.capacity + 1}, got ${overshoot.status}`);
 
-const nowFull = (await call(session, "/api/spaces")).body.spaces.find((s) => s.id === target.id);
-check("that space is now full", nowFull.seatsFree === 0 && nowFull.availability === "full",
-  `${nowFull.seatsFree} free, ${nowFull.availability}`);
-
-const oneMore = await call(session, "/api/bookings", {
-  method: "POST",
-  body: { spaceId: target.id, plan: "Day Pass", duration: "Full Day", startsOn: today, seats: 1 },
-});
+check("booking exactly the capacity succeeds", (await book(target.capacity)).status === 201);
+const oneMore = await book(1);
 check("a full space refuses even one seat", oneMore.status === 409, `got ${oneMore.status}`);
-check("total booked never exceeds capacity",
-  nowFull.seatsTaken <= nowFull.capacity, `${nowFull.seatsTaken}/${nowFull.capacity}`);
+check("the refusal says it is full or how many remain",
+  /fully booked|\d+ seats? left/i.test(oneMore.body?.error?.message ?? ""), oneMore.body?.error?.message);
 
-// Tomorrow is a different day, so the same space is bookable again.
-const tomorrow = (() => { const d = new Date(Date.now() + 86400000), p = (n) => String(n).padStart(2, "0");
+// A different day is a different allocation.
+const dayAfter = (() => { const d = new Date(`${futureDate}T00:00:00`); d.setDate(d.getDate() + 1);
+  const p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; })();
-const nextDay = await call(session, "/api/bookings", {
-  method: "POST",
-  body: { spaceId: target.id, plan: "Day Pass", duration: "Full Day", startsOn: tomorrow, seats: 1 },
+check("a space full on one day is bookable the next", (await book(1, dayAfter)).status === 201);
+
+/* ── add-ons: catalogue and per-user subscriptions ────────────────────── */
+check("/api/addons needs a session", (await call(new Jar(), "/api/addons")).status === 401);
+
+const catalogue = (await call(session, "/api/addons")).body.addons;
+check("add-on catalogue is served", catalogue?.length === 4, `got ${catalogue?.length}`);
+check("each add-on is priced", catalogue.every((a) =>
+  Number.isInteger(a.price) && typeof a.unit === "string" && typeof a.planLabel === "string"));
+check("each add-on says whether you're subscribed",
+  catalogue.every((a) => typeof a.subscribed === "boolean"));
+
+// Start from a known state regardless of what earlier runs or the browser left.
+for (const a of catalogue.filter((a) => a.subscribed)) {
+  await call(session, `/api/addons/${a.id}/subscription`, { method: "DELETE" });
+}
+
+const sub = await call(session, "/api/addons/it-support/subscription", { method: "POST" });
+check("subscribing returns 201", sub.status === 201, `got ${sub.status}`);
+
+const afterSub = (await call(session, "/api/addons")).body.addons;
+check("the subscription is reflected back",
+  afterSub.find((a) => a.id === "it-support").subscribed === true);
+check("subscribing doesn't affect other add-ons",
+  afterSub.filter((a) => a.subscribed).length === 1);
+
+// Idempotence: a double-click must not create a second billable row.
+await call(session, "/api/addons/it-support/subscription", { method: "POST" });
+const afterTwice = (await call(session, "/api/addons")).body.addons;
+check("subscribing twice does not duplicate",
+  afterTwice.filter((a) => a.subscribed).length === 1);
+
+const unknown = await call(session, "/api/addons/not-a-service/subscription", { method: "POST" });
+check("unknown add-on is 404", unknown.status === 404, `got ${unknown.status}`);
+
+/* Subscriptions must be private to their owner. */
+const otherJar = new Jar();
+const otherEmail = `addons_${Date.now()}@cowork.test`;
+await call(otherJar, "/api/auth/register", {
+  method: "POST", body: { name: "Other Member", email: otherEmail, password: "cowork123", role: "User" },
 });
-check("a space full today is still bookable tomorrow", nextDay.status === 201, `got ${nextDay.status}`);
+const otherView = (await call(otherJar, "/api/addons")).body.addons;
+check("another user does not see your subscriptions",
+  otherView.every((a) => a.subscribed === false),
+  JSON.stringify(otherView.filter((a) => a.subscribed).map((a) => a.id)));
+
+await call(otherJar, "/api/addons/food/subscription", { method: "POST" });
+const mineStill = (await call(session, "/api/addons")).body.addons;
+check("their subscription does not appear in yours",
+  mineStill.find((a) => a.id === "food").subscribed === false);
+check("your own subscription is untouched",
+  mineStill.find((a) => a.id === "it-support").subscribed === true);
+
+const gone = await call(session, "/api/addons/it-support/subscription", { method: "DELETE" });
+check("unsubscribing succeeds", gone.status === 200, `got ${gone.status}`);
+check("unsubscribing twice is 404",
+  (await call(session, "/api/addons/it-support/subscription", { method: "DELETE" })).status === 404);
+check("nothing is subscribed afterwards",
+  (await call(session, "/api/addons")).body.addons.every((a) => !a.subscribed));
 
 /* ── booking validation ───────────────────────────────────────────────── */
 const past = await call(session, "/api/bookings", {

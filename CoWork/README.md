@@ -9,6 +9,7 @@ npm install          # once, from this directory — installs every workspace
 cp .env.example .env # then set JWT_SECRET:  openssl rand -hex 32
 npm run dev          # web :5173 · gateway :4000 · auth :4001
                      #            · spaces :4002 · bookings :4003
+                     #            · addons :4004
 ```
 
 Open http://localhost:5173 and sign in with the seeded account:
@@ -31,6 +32,8 @@ services/auth/      :4001  Accounts. Owns data/auth.db and nothing else reads it
 services/spaces/    :4002  Space catalogue, capacity, and the plan catalogue.
                     Owns data/spaces.db.
 services/bookings/  :4003  Reservations + the SSE feed. Owns data/bookings.db.
+services/addons/    :4004  Add-on catalogue and per-user subscriptions.
+                    Owns data/addons.db.
 packages/shared/    env, JWT sign/verify, HTTP errors, zod schemas — the contract
                     every service and the web form share.
 scripts/smoke.mjs   End-to-end API check.
@@ -82,6 +85,18 @@ returns, with `seatsFree: null` — unknown availability, never a fabricated "al
 Availability is **enforced**, not just displayed: the bookings service checks a request
 against seats already taken for that space and date and answers 409 with how many remain.
 Before that check existed, a 60-seat room could be sold 80 seats one booking at a time.
+
+## Add-ons
+
+`GET /api/addons` returns the catalogue with a `subscribed` flag per add-on for the calling
+user, composed at the gateway from the addons service's two tables. Subscriptions are
+per-user and private — the service only ever sees the id the gateway derived from the session
+cookie, and a smoke test asserts one user cannot see another's.
+
+Subscribing is idempotent (a UNIQUE constraint on user+add-on), so a double-click cannot
+create two billable rows. The Services page, the sidebar badge and the Payment order summary
+all read from one provider, so they cannot contradict each other the way the old hardcoded
+lists did.
 
 ## Adding a service
 

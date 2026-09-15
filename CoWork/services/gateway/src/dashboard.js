@@ -122,3 +122,30 @@ export async function composeSpaces(userId) {
 
   return { spaces, degraded: seatsBySpace === null ? ["bookings"] : [] };
 }
+
+/**
+ * The add-on catalogue with the caller's own subscriptions folded in, so the page
+ * needs one request and the cards and the table can never disagree.
+ *
+ * Subscriptions are strictly per-user: the addons service only ever sees the id
+ * the gateway derived from the session cookie.
+ */
+export async function composeAddons(userId) {
+  const [catalog, subs] = await Promise.allSettled([
+    serviceFetch(`${env.addonsServiceUrl}/addons`, {}, "add-ons"),
+    serviceFetch(`${env.addonsServiceUrl}/subscriptions`, { headers: { "x-user-id": userId } }, "add-ons"),
+  ]);
+
+  if (catalog.status === "rejected") throw catalog.reason;
+  if (subs.status === "rejected") throw subs.reason;
+
+  const mine = new Map(subs.value.subscriptions.map((s) => [s.addonId, s]));
+
+  return {
+    addons: catalog.value.addons.map((addon) => ({
+      ...addon,
+      subscribed: mine.has(addon.id),
+      subscribedAt: mine.get(addon.id)?.createdAt ?? null,
+    })),
+  };
+}

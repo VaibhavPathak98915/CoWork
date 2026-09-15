@@ -7,6 +7,7 @@ import Plans from "../pages/Plans.jsx";
 import Spaces from "../pages/Spaces.jsx";
 import Services from "../pages/Services.jsx";
 import Payment from "../pages/Payment.jsx";
+import { useAddons } from "../addons/AddonsProvider.jsx";
 
 /* ═══════════════════════════════════════════
    MAIN APP (after auth)
@@ -15,7 +16,7 @@ const navItems = [
   {id:"dashboard",icon:"⬡",label:"Dashboard",section:"Main"},
   {id:"plans",icon:"◈",label:"Plans",section:"Main"},
   {id:"spaces",icon:"⊞",label:"Spaces",section:"Main"},
-  {id:"services",icon:"✦",label:"Services",badge:3,section:"Main"},
+  {id:"services",icon:"✦",label:"Services",section:"Main"},
   {id:"payment",icon:"◎",label:"Payment",section:"Manage"},
 ];
 const pageTitles = {dashboard:"Dashboard",plans:"Plans & Pricing",spaces:"Spaces",services:"Services & Add-ons",payment:"Make Payment"};
@@ -31,6 +32,8 @@ const MainApp = ({user, onLogout}) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [toast, setToast] = useState({msg:"",visible:false});
   const toastTimer = useRef(null);
+  // The badge counts real subscriptions; it used to be a hardcoded 3.
+  const { active: activeAddons } = useAddons();
 
   const showToast = (msg) => {
     clearTimeout(toastTimer.current);
@@ -67,7 +70,7 @@ const MainApp = ({user, onLogout}) => {
                   onMouseLeave={e=>{if(page!==n.id){e.currentTarget.style.color="var(--muted)";e.currentTarget.style.background=""}}}>
                   <span style={{fontSize:16,width:20,textAlign:"center"}}>{n.icon}</span>
                   {n.label}
-                  {n.badge&&<span style={{marginLeft:"auto",background:"var(--accent2)",color:"#fff",fontSize:10,padding:"2px 7px",borderRadius:999,fontWeight:600}}>{n.badge}</span>}
+                  {n.id==="services"&&activeAddons.length>0&&<span style={{marginLeft:"auto",background:"var(--accent2)",color:"#fff",fontSize:10,padding:"2px 7px",borderRadius:999,fontWeight:600}}>{activeAddons.length}</span>}
                 </div>
               ))}
             </div>

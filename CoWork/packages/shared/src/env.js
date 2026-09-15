@@ -11,6 +11,8 @@ export const env = {
   spacesServiceUrl: process.env.SPACES_SERVICE_URL ?? "http://127.0.0.1:4002",
   bookingsPort: Number(process.env.BOOKINGS_PORT ?? 4003),
   bookingsServiceUrl: process.env.BOOKINGS_SERVICE_URL ?? "http://127.0.0.1:4003",
+  addonsPort: Number(process.env.ADDONS_PORT ?? 4004),
+  addonsServiceUrl: process.env.ADDONS_SERVICE_URL ?? "http://127.0.0.1:4004",
   webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
   get isProduction() {
     return this.nodeEnv === "production";
