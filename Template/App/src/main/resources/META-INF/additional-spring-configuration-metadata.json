@@ -1,0 +1,12 @@
+{"properties": [
+  {
+    "name": "spring.mongodb.socket-timeout",
+    "type": "java.lang.String",
+    "description": "A description for 'spring.mongodb.socket-timeout'"
+  },
+  {
+    "name": "spring.mongodb.connect-timeout",
+    "type": "java.lang.String",
+    "description": "A description for 'spring.mongodb.connect-timeout'"
+  }
+]}

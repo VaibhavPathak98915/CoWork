@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: App
+  data:
+    mongodb:
+      auto-index-creation: true 
+  mongodb:
+    uri: mongodb+srv://vaibhavpathak:Chips%40123@cluster0.5w2mdvu.mongodb.net/?appName=Cluster0
+    database: coworkdb
+    # port: 27017
+    # host: localhost
+    socket-timeout: 3000ms
+    connect-timeout: 2000ms
